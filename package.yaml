@@ -1,0 +1,14 @@
+name: hugen
+
+dependencies:
+  - base
+  - unix
+
+tests:
+  spec:
+    main: Spec.hs
+    source-dirs:
+      - test
+      - src
+    dependencies:
+      - hspec

@@ -1,0 +1,27 @@
+cabal-version: 1.12
+
+-- This file has been generated from package.yaml by hpack version 0.31.2.
+--
+-- see: https://github.com/sol/hpack
+--
+-- hash: d75b9f52eb25be95e52d00a91a5aa7753ed7f4887f501d762acdf2ebe0c2382e
+
+name:           hugen
+version:        0.0.0
+build-type:     Simple
+
+test-suite spec
+  type: exitcode-stdio-1.0
+  main-is: Spec.hs
+  other-modules:
+      UGenSpec
+      UGen
+      Paths_hugen
+  hs-source-dirs:
+      test
+      src
+  build-depends:
+      base
+    , hspec
+    , unix
+  default-language: Haskell2010
