@@ -1,4 +1,5 @@
 {-# LANGUAGE ScopedTypeVariables #-}
+{-# LANGUAGE NamedFieldPuns #-}
 
 module UGen where
 
@@ -20,47 +21,53 @@ loadSO path = do
 apiVersion :: SharedObject -> IO Int
 apiVersion (SharedObject dl) = do
   funPtr :: FunPtr (IO CInt) <- dlsym dl "api_version"
-  fromIntegral <$> cint_dynamic funPtr
+  fromIntegral <$> api_version_dynamic funPtr
 
 foreign import ccall "dynamic"
-  cint_dynamic :: FunPtr (IO CInt) -> IO CInt
+  api_version_dynamic :: FunPtr (IO CInt) -> IO CInt
 
 unitClassNames :: SharedObject -> IO [String]
 unitClassNames (SharedObject dl) = do
-  ptr <- malloc
-  poke ptr InterfaceTable
   funPtr :: FunPtr (Ptr InterfaceTable -> IO ()) <- dlsym dl "load"
-  print "before"
+  ptr <- malloc
+  mvar <- newMVar []
+  poke ptr $ InterfaceTable $ \ name ->
+    modifyMVar mvar $ \ old -> do
+      return (old ++ [name], True)
   load_dynamic funPtr ptr
-  print "after"
-  undefined
+  readMVar mvar
 
 foreign import ccall "dynamic"
   load_dynamic :: FunPtr (Ptr InterfaceTable -> IO ())
     -> Ptr InterfaceTable -> IO ()
 
-data InterfaceTable = InterfaceTable
+data InterfaceTable = InterfaceTable {
+  defineUnit :: String -> IO Bool
+}
 
 instance Storable InterfaceTable where
   sizeOf _ = 320
   alignment _ = 64
   peek _ = undefined
-  poke ptr InterfaceTable = do
-    print "poking"
-    let foo _ _ _ _ _ = do
-          putStrLn "hooooray"
-          threadDelay 1000000
+  poke ptr (InterfaceTable {defineUnit}) = do
+    let c_defineUnit inUnitClassName _ _ _ _ = do
+          result <- defineUnit =<< peekCString inUnitClassName
+          return $ CBool $ if result then 0 else 1
+    poke (plusPtr ptr 48) =<< fDefineUnit_wrapper c_defineUnit
+    let defineBufGen _ _ = do
           return $ CBool 0
-    print "poking"
-    cfoo <- fDefineUnit_wrapper foo
-    print "poking"
-    poke (plusPtr ptr 48) cfoo
-    print "poking"
+    poke (plusPtr ptr 72) =<< fDefineBufGen_wrapper defineBufGen
 
+-- bool (*fDefineUnit)(const char* inUnitClassName, size_t inAllocSize,
+--       UnitCtorFunc inCtor, UnitDtorFunc inDtor,
+--       uint32 inFlags);
 foreign import ccall "wrapper"
   fDefineUnit_wrapper ::
     (CString -> CLong -> FunPtr () -> FunPtr () -> CUInt -> IO CBool)
       -> IO (FunPtr (CString -> CLong -> FunPtr () -> FunPtr () -> CUInt -> IO CBool))
--- bool (*fDefineUnit)(const char* inUnitClassName, size_t inAllocSize,
-      -- UnitCtorFunc inCtor, UnitDtorFunc inDtor,
-      -- uint32 inFlags);
+
+-- bool (*fDefineBufGen)(const char* inName, BufGenFunc inFunc);
+foreign import ccall "wrapper"
+  fDefineBufGen_wrapper ::
+    (CString -> FunPtr () -> IO CBool)
+      -> IO (FunPtr (CString -> FunPtr () -> IO CBool))
